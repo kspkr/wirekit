@@ -17,6 +17,10 @@ as plain Go values you can inspect, change and write back. Built for proxies and
 
 [Packages](#packages) · [Quick start](#quick-start) · [Examples](#examples) · [Design](docs/design.md) · [Performance](#performance)
 
+<br>
+
+<img src="docs/images/screenshot.png" alt="A Go program using WireKit to inspect a captured gzip response and flag an invalid cookie, next to the WebSocket frame decoder" width="100%">
+
 </div>
 
 ```go
