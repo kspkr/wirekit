@@ -1,0 +1,17 @@
+# Build and test output
+*.test
+*.out
+*.prof
+coverage.txt
+/bin/
+/dist/
+
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Fuzz cache lives in GOCACHE, not the repo; only minimized failing
+# inputs under testdata/fuzz are committed.

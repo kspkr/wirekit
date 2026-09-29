@@ -1,0 +1,54 @@
+name: Fuzz
+
+# Longer fuzzing than CI can afford, on a schedule and on demand. Failing
+# inputs are uploaded as artifacts so they can be added to testdata/fuzz.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "Time per fuzz target (e.g. 2m)"
+        default: "2m"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+      - name: Fuzz every target
+        env:
+          FUZZTIME: ${{ github.event.inputs.fuzztime || '2m' }}
+        run: |
+          set -uo pipefail
+          status=0
+          for pkg in $(go list ./...); do
+            for fn in $(go test -list '^Fuzz' "$pkg" | grep '^Fuzz' || true); do
+              echo "== $pkg $fn ($FUZZTIME)"
+              if go test "$pkg" -run '^$' -fuzz="^${fn}\$" -fuzztime="$FUZZTIME" 2>&1 | tee fuzz.log; then
+                continue
+              fi
+              # Only a written corpus entry counts as a real failure; see ci.yml.
+              if grep -q 'context deadline exceeded' fuzz.log && [ -z "$(git status --porcelain -- '*/testdata/fuzz/*')" ]; then
+                echo "::notice::$fn hit the fuzz deadline during minimization; no failing input was produced"
+                continue
+              fi
+              status=1
+            done
+          done
+          exit $status
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-failures
+          path: "**/testdata/fuzz/**"
+          if-no-files-found: ignore

@@ -1,0 +1,35 @@
+name: Benchmarks
+
+# Runs every benchmark and publishes the results as a job summary. Manual
+# only: shared runners are too noisy for automatic regression gates.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+      - name: Benchmark
+        run: |
+          go test ./... -run '^$' -bench . -benchmem -count=3 | tee bench.txt
+      - name: Summary
+        run: |
+          {
+            echo '## Benchmarks'
+            echo
+            echo '```'
+            grep -E '^(goos|goarch|cpu|Benchmark)' bench.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-results
+          path: bench.txt

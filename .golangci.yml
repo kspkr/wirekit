@@ -1,0 +1,52 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - nolintlint
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      # bufio.Writer records the first error and returns it from Flush.
+      exclude-functions:
+        - (*bufio.Writer).Write
+        - (*bufio.Writer).WriteByte
+        - (*bufio.Writer).WriteString
+    errorlint:
+      # Comparing to io.EOF directly is the idiom for readers.
+      comparison: false
+    gosec:
+      excludes:
+        - G104 # errcheck covers unhandled errors, with bufio exclusions
+        - G124 # converting cookies to http.Cookie is not setting them
+        - G401 # sha1/md5 are required by the WebSocket and JA3 specs
+        - G501
+        - G505
+    revive:
+      rules:
+        - name: exported
+          arguments: [disableStutteringCheck]
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [bodyclose, gosec, errcheck, unparam]
+      - path: examples/
+        linters: [errcheck, gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

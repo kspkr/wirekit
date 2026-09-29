@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (go ${{ matrix.go }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        go: ["1.25.x", "1.26.x"]
+        include:
+          - os: windows-latest
+            go: "1.26.x"
+          - os: macos-latest
+            go: "1.26.x"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Test with race detector
+        if: runner.os != 'Windows'
+        run: go test -count=1 -race ./...
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "files need gofmt:"
+            echo "$out"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.12
+
+  fuzz-smoke:
+    name: fuzz smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+      - name: Run each fuzz target briefly
+        run: |
+          set -uo pipefail
+          status=0
+          for pkg in $(go list ./...); do
+            for fn in $(go test -list '^Fuzz' "$pkg" | grep '^Fuzz' || true); do
+              echo "== $pkg $fn"
+              if go test "$pkg" -run '^$' -fuzz="^${fn}\$" -fuzztime=10s 2>&1 | tee fuzz.log; then
+                continue
+              fi
+              # A real failure always writes a minimized input under
+              # testdata/fuzz. The coordinator can also report "context
+              # deadline exceeded" when -fuzztime expires mid-minimization;
+              # that is not a bug in the code under test.
+              if grep -q 'context deadline exceeded' fuzz.log && [ -z "$(git status --porcelain -- '*/testdata/fuzz/*')" ]; then
+                echo "::notice::$fn hit the fuzz deadline during minimization; no failing input was produced"
+                continue
+              fi
+              status=1
+            done
+          done
+          exit $status
